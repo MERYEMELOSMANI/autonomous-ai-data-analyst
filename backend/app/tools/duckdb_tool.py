@@ -7,8 +7,8 @@ from app.core.security import validate_sql_query
 
 class DuckDBTool:
     def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or str(settings.DUCKDB_DIR / "analytics.duckdb")
-        # DuckDB in-memory or file connection
+        # Use in-memory DuckDB connection to eliminate multi-process file locking conflicts
+        self.db_path = db_path or ":memory:"
         self.conn = duckdb.connect(self.db_path)
         # Configure thread count and memory limit for safety
         self.conn.execute("SET memory_limit = '2GB';")
@@ -26,9 +26,17 @@ class DuckDBTool:
                 f"CREATE OR REPLACE VIEW \"{table_name}\" AS SELECT * FROM read_parquet('{path_str}');"
             )
         elif file_format in ["xlsx", "xls"]:
-            # For excel, it's typically pre-converted to parquet or csv on upload
+            parquet_path = file_path.with_suffix(".parquet")
+            if not parquet_path.exists():
+                import pandas as pd
+                import polars as pl
+                df_pd = pd.read_excel(file_path)
+                df_pd.columns = [str(c).strip() for c in df_pd.columns]
+                df = pl.from_pandas(df_pd)
+                df.write_parquet(parquet_path)
+            pq_str = str(parquet_path).replace("\\", "/")
             self.conn.execute(
-                f"CREATE OR REPLACE VIEW \"{table_name}\" AS SELECT * FROM read_parquet('{path_str}');"
+                f"CREATE OR REPLACE VIEW \"{table_name}\" AS SELECT * FROM read_parquet('{pq_str}');"
             )
         else:
             raise ValueError(f"Unsupported file format for DuckDB: {file_format}")

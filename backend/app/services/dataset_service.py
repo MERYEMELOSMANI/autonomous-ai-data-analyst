@@ -66,6 +66,7 @@ class DatasetService:
             duckdb_tool.register_dataset(table_name, target_path, ext)
         except Exception as e:
             target_path.unlink(missing_ok=True)
+            target_path.with_suffix(".parquet").unlink(missing_ok=True)
             raise ValueError(f"Failed to register dataset view in DuckDB: {str(e)}")
 
         dataset_record = DatasetModel(
@@ -108,6 +109,7 @@ class DatasetService:
         # Remove physical file
         file_path = settings.UPLOAD_DIR / dataset.filename
         file_path.unlink(missing_ok=True)
+        file_path.with_suffix(".parquet").unlink(missing_ok=True)
 
         await db.delete(dataset)
         await db.commit()
