@@ -85,7 +85,7 @@ Return JSON:
             })
 
             # Derive preliminary findings from data rows
-            findings = cls._extract_preliminary_findings(rows, col_names, query)
+            findings = cls._extract_preliminary_findings(rows, col_names, query, schema_info, state.get("dataset_name", "Dataset"))
 
         except Exception as e:
             error_msg = str(e)
@@ -145,52 +145,148 @@ Return JSON:
         }
 
     @staticmethod
-    def _generate_heuristic_query(query: str, table_name: str, schema_info: List[Dict[str, Any]]) -> tuple[str, str]:
+    def _is_id_col(name: str) -> bool:
+        nl = name.lower().replace(" ", "_")
+        return any(k in nl for k in ["id", "code", "ref", "key", "num", "no", "uuid", "identifier"])
+
+    @classmethod
+    def _find_label_col(cls, cols: List[str]) -> Optional[str]:
+        for c in cols:
+            if cls._is_id_col(c):
+                continue
+            nl = c.lower()
+            if any(k in nl for k in ["nom", "name", "title", "titre", "label", "product", "produit", "item"]):
+                return c
+        return None
+
+    @classmethod
+    def _generate_heuristic_query(cls, query: str, table_name: str, schema_info: List[Dict[str, Any]]) -> tuple[str, str]:
         """Generate smart heuristic SQL query based on question keywords and column types."""
+        q_lower = query.lower()
+
         numeric_cols = [
             c.get("name", c.get("column_name", ""))
             for c in schema_info
             if any(t in str(c.get("data_type", c.get("column_type", ""))).lower() for t in ["int", "float", "double", "decimal", "numeric", "real"])
         ]
-        cat_cols = [
+        all_cat_cols = [
             c.get("name", c.get("column_name", ""))
             for c in schema_info
             if not any(t in str(c.get("data_type", c.get("column_type", ""))).lower() for t in ["int", "float", "double", "decimal", "numeric", "real"])
         ]
 
-        q_lower = query.lower()
+        label_col = cls._find_label_col(all_cat_cols)
+        true_cat_cols = [c for c in all_cat_cols if not cls._is_id_col(c) and c != label_col]
 
-        # Group-by query
-        if cat_cols and numeric_cols and any(k in q_lower for k in ["by", "category", "compare", "breakdown", "top", "distribution", "highest", "lowest", "most"]):
-            cat = cat_cols[0]
+        is_overview = any(phrase in q_lower for phrase in [
+            "what is this data about", "what is this dataset", "what is this", "what is in", "tell me about",
+            "overview", "describe", "explain", "summary", "summarize", "about", "what do we have", "what is this table",
+            "what does this contain", "what do you understand", "c'est quoi", "de quoi", "données", "aperçu", "resume", "résumé"
+        ])
+
+        def clean_alias(col_name: str) -> str:
+            cleaned = col_name.replace(" ", "_").replace("(", "").replace(")", "").replace("%", "pct").replace("€", "eur").replace("/", "_").replace("-", "_")
+            return "".join(ch for ch in cleaned if ch.isalnum() or ch == "_")
+
+        # Overview questions
+        if is_overview:
+            if numeric_cols:
+                metrics_parts = ["COUNT(*) as total_records"]
+                for num in numeric_cols[:2]:
+                    ca = clean_alias(num)
+                    metrics_parts.extend([
+                        f'ROUND(AVG("{num}"), 2) as "avg_{ca}"',
+                        f'ROUND(MIN("{num}"), 2) as "min_{ca}"',
+                        f'ROUND(MAX("{num}"), 2) as "max_{ca}"'
+                    ])
+                sql = f'SELECT {", ".join(metrics_parts)} FROM "{table_name}"'
+                return sql, "Aggregating dataset dimensions and baseline statistical distributions"
+            return f'SELECT COUNT(*) as total_records FROM "{table_name}"', "Calculating total records"
+
+        # Group-by query on genuine categories (never on raw IDs)
+        if true_cat_cols and numeric_cols and any(k in q_lower for k in ["by", "category", "compare", "breakdown", "distribution", "group", "par", "selon", "répartition"]):
+            cat = true_cat_cols[0]
             num = numeric_cols[0]
-            sql = f'SELECT "{cat}", COUNT(*) as record_count, ROUND(SUM("{num}"), 2) as total_{num}, ROUND(AVG("{num}"), 2) as avg_{num} FROM "{table_name}" WHERE "{cat}" IS NOT NULL GROUP BY "{cat}" ORDER BY total_{num} DESC LIMIT 15'
+            ca = clean_alias(num)
+            sql = f'SELECT "{cat}", COUNT(*) as record_count, ROUND(SUM("{num}"), 2) as "total_{ca}", ROUND(AVG("{num}"), 2) as "avg_{ca}" FROM "{table_name}" WHERE "{cat}" IS NOT NULL GROUP BY "{cat}" ORDER BY "total_{ca}" DESC LIMIT 15'
             return sql, f"Aggregating '{num}' grouped by '{cat}'"
 
         # Statistical summary query
-        if numeric_cols and any(k in q_lower for k in ["average", "mean", "total", "sum", "stats", "summary", "pattern"]):
+        if numeric_cols and any(k in q_lower for k in ["average", "mean", "total", "sum", "stats", "summary", "pattern", "moyenne", "somme"]):
             num = numeric_cols[0]
+            ca1 = clean_alias(num)
             num2 = numeric_cols[1] if len(numeric_cols) > 1 else None
             if num2:
-                sql = f'SELECT COUNT(*) as total_records, ROUND(AVG("{num}"), 2) as avg_{num}, ROUND(MIN("{num}"), 2) as min_{num}, ROUND(MAX("{num}"), 2) as max_{num}, ROUND(AVG("{num2}"), 2) as avg_{num2} FROM "{table_name}"'
+                ca2 = clean_alias(num2)
+                sql = f'SELECT COUNT(*) as total_records, ROUND(AVG("{num}"), 2) as "avg_{ca1}", ROUND(MIN("{num}"), 2) as "min_{ca1}", ROUND(MAX("{num}"), 2) as "max_{ca1}", ROUND(AVG("{num2}"), 2) as "avg_{ca2}" FROM "{table_name}"'
             else:
-                sql = f'SELECT COUNT(*) as total_records, ROUND(AVG("{num}"), 2) as avg_{num}, ROUND(MIN("{num}"), 2) as min_{num}, ROUND(MAX("{num}"), 2) as max_{num} FROM "{table_name}"'
-            return sql, f"Calculating key summary statistics for numerical metrics"
+                sql = f'SELECT COUNT(*) as total_records, ROUND(AVG("{num}"), 2) as "avg_{ca1}", ROUND(MIN("{num}"), 2) as "min_{ca1}", ROUND(MAX("{num}"), 2) as "max_{ca1}" FROM "{table_name}"'
+            return sql, "Calculating key summary statistics for numerical metrics"
 
-        # Default overview query
-        cols_to_select = [f'"{c}"' for c in (cat_cols[:3] + numeric_cols[:3]) if c]
+        # Ranking / Top / Lowest items (multilingual)
+        is_top = any(k in q_lower for k in [
+            "top", "highest", "best", "max", "most", "cher", "chers", "chère", "chères", "plus grand", "élevé",
+            "lowest", "bottom", "least", "cheapest", "min", "moins cher"
+        ])
+        if numeric_cols and is_top:
+            order_dir = "ASC" if any(k in q_lower for k in ["lowest", "bottom", "least", "cheapest", "min", "moins"]) else "DESC"
+            num = numeric_cols[0]
+            if label_col:
+                sql = f'SELECT "{label_col}", "{num}" FROM "{table_name}" WHERE "{label_col}" IS NOT NULL ORDER BY "{num}" {order_dir} LIMIT 10'
+                return sql, f"Ranking top items by '{label_col}' according to '{num}' ({order_dir})"
+            elif true_cat_cols:
+                cat = true_cat_cols[0]
+                ca = clean_alias(num)
+                sql = f'SELECT "{cat}", ROUND(SUM("{num}"), 2) as "total_{ca}" FROM "{table_name}" WHERE "{cat}" IS NOT NULL GROUP BY "{cat}" ORDER BY "total_{ca}" {order_dir} LIMIT 10'
+                return sql, f"Ranking categories by '{cat}' according to '{num}' ({order_dir})"
+
+        # Default overview preview
+        cols_to_select = [f'"{c}"' for c in (all_cat_cols[:3] + numeric_cols[:3]) if c]
         select_clause = ", ".join(cols_to_select) if cols_to_select else "*"
         sql = f'SELECT {select_clause} FROM "{table_name}" LIMIT 25'
         return sql, "Querying representative dataset records for analysis"
 
-    @staticmethod
-    def _extract_preliminary_findings(rows: List[Dict[str, Any]], col_names: List[str], query: str) -> List[Dict[str, Any]]:
+    @classmethod
+    def _extract_preliminary_findings(cls, rows: List[Dict[str, Any]], col_names: List[str], query: str, schema_info: List[Dict[str, Any]] = None, dataset_name: str = "Dataset") -> List[Dict[str, Any]]:
         """Extract structured quantitative findings from result rows."""
         findings = []
         if not rows:
             return findings
 
-        # If aggregated group by
+        q_lower = query.lower()
+        is_overview = any(phrase in q_lower for phrase in [
+            "what is this data about", "what is this dataset", "what is this", "what is in", "tell me about",
+            "overview", "describe", "explain", "summary", "summarize", "about", "what do we have",
+            "what does this contain", "what do you understand"
+        ])
+
+        # If overview question
+        if is_overview and len(rows) == 1:
+            row = rows[0]
+            total_items = row.get("total_records", row.get("total_items", len(rows)))
+            cols_list = [c.get("name", c.get("column_name", "")) for c in (schema_info or [])]
+            col_preview = ", ".join(cols_list[:5]) if cols_list else "tracked properties"
+            
+            findings.append({
+                "title": f"Dataset Identity: {dataset_name}",
+                "description": f"This dataset contains {total_items} records cataloging information across {len(schema_info or col_names)} attributes ({col_preview}).",
+                "supporting_metrics": {"total_records": total_items}
+            })
+
+            # Check if average/min/max was computed
+            for k, val in row.items():
+                if k.startswith("avg_") and isinstance(val, (int, float)):
+                    base_metric = k.replace("avg_", "")
+                    min_val = row.get(f"min_{base_metric}")
+                    max_val = row.get(f"max_{base_metric}")
+                    findings.append({
+                        "title": f"Key Metric Profile: {base_metric}",
+                        "description": f"Across all records, '{base_metric}' averages {val:,.2f} ranging from {min_val} to {max_val}.",
+                        "supporting_metrics": {f"avg_{base_metric}": val}
+                    })
+            return findings
+
+        # If aggregated group by or ranked items
         if len(rows) > 1 and len(col_names) >= 2:
             first_row = rows[0]
             cat_col = col_names[0]
@@ -198,9 +294,11 @@ Return JSON:
             top_category = first_row.get(cat_col)
             top_val = first_row.get(val_col)
             formatted_top_val = f"{top_val:,.2f}" if isinstance(top_val, float) else f"{top_val:,}" if isinstance(top_val, int) else str(top_val)
+            is_item = any(k in cat_col.lower() for k in ["nom", "name", "produit", "product", "item", "title", "record", "label"])
+            top_title = f"Leading Item: {top_category}" if is_item else f"Top Performing Category: {top_category}"
             findings.append({
-                "title": f"Top Performing Category: {top_category}",
-                "description": f"The leading segment '{top_category}' achieved {val_col} of {formatted_top_val}.",
+                "title": top_title,
+                "description": f"The leading record '{top_category}' achieved {val_col} of {formatted_top_val}.",
                 "supporting_metrics": {cat_col: top_category, val_col: top_val}
             })
 
@@ -208,9 +306,10 @@ Return JSON:
                 second_row = rows[1]
                 second_val = second_row.get(val_col)
                 formatted_second_val = f"{second_val:,.2f}" if isinstance(second_val, float) else f"{second_val:,}" if isinstance(second_val, int) else str(second_val)
+                second_title = f"Second Rank Item: {second_row.get(cat_col)}" if is_item else f"Second Rank Category: {second_row.get(cat_col)}"
                 findings.append({
-                    "title": f"Second Rank: {second_row.get(cat_col)}",
-                    "description": f"The runner-up segment '{second_row.get(cat_col)}' recorded {val_col} of {formatted_second_val} across {len(rows)} compared categories.",
+                    "title": second_title,
+                    "description": f"The runner-up record '{second_row.get(cat_col)}' recorded {val_col} of {formatted_second_val} across {len(rows)} compared entries.",
                     "supporting_metrics": {cat_col: second_row.get(cat_col), val_col: second_val}
                 })
 

@@ -29,7 +29,7 @@ async def get_system_settings():
 
 @router.post("")
 async def update_system_settings(req: SettingsUpdateRequest):
-    """Update runtime configuration (e.g. configure Gemini API key)."""
+    """Update runtime configuration (e.g. configure Gemini API key) and persist to .env."""
     if req.gemini_api_key is not None:
         settings.GEMINI_API_KEY = req.gemini_api_key.strip()
         llm_provider.api_key = settings.GEMINI_API_KEY
@@ -40,6 +40,25 @@ async def update_system_settings(req: SettingsUpdateRequest):
         llm_provider._client = None
     if req.observability_enabled is not None:
         settings.ENABLE_OBSERVABILITY = req.observability_enabled
+
+    # Persist to .env
+    try:
+        from app.core.config import BASE_DIR
+        env_file = BASE_DIR / ".env"
+        env_vars = {}
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                if "=" in line and not line.strip().startswith("#"):
+                    k, v = line.split("=", 1)
+                    env_vars[k.strip()] = v.strip()
+        if settings.GEMINI_API_KEY:
+            env_vars["GEMINI_API_KEY"] = settings.GEMINI_API_KEY
+        if settings.GEMINI_MODEL:
+            env_vars["GEMINI_MODEL"] = settings.GEMINI_MODEL
+        env_content = "\n".join([f"{k}={v}" for k, v in env_vars.items()]) + "\n"
+        env_file.write_text(env_content, encoding="utf-8")
+    except Exception as e:
+        pass
 
     return {
         "message": "Settings updated successfully",

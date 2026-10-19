@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     
     # AI / LLM Configuration
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     AI_PROVIDER: str = "gemini"  # gemini, mock, offline
     TEMPERATURE: float = 0.1
     MAX_RETRIES: int = 2

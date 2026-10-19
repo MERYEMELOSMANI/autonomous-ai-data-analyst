@@ -35,14 +35,28 @@ Return a JSON object with:
                 plan = res["plan"]
 
         if not plan:
-            # Deterministic default plan
-            plan = [
-                "1. Profile relevant column distributions and check data quality",
-                f"2. Formulate analytical SQL queries against table '{table_name}'",
-                "3. Compute aggregations and identify key patterns",
-                "4. Independently verify all numerical calculations and extract evidence",
-                "5. Render interactive visualizations and synthesize findings"
-            ]
+            q_lower = query.lower()
+            is_overview = any(phrase in q_lower for phrase in [
+                "what is this data about", "what is this dataset", "what is this", "what is in", "tell me about",
+                "overview", "describe", "explain", "summary", "summarize", "about", "what do we have", "what is this table",
+                "what does this contain", "what do you understand"
+            ])
+            if is_overview:
+                plan = [
+                    f"1. Profile dataset structure, row volume, and column schemas for table '{table_name}'",
+                    "2. Audit data completeness, duplicate records, and potential anomalies",
+                    "3. Aggregate dataset dimensions and baseline statistical distributions",
+                    "4. Independently verify calculated metrics against ground-truth database rows",
+                    "5. Synthesize domain profile, catalog summary, and interactive distributions"
+                ]
+            else:
+                plan = [
+                    "1. Profile relevant column distributions and check data quality",
+                    f"2. Formulate analytical SQL queries against table '{table_name}'",
+                    "3. Compute aggregations and identify key patterns",
+                    "4. Independently verify all numerical calculations and extract evidence",
+                    "5. Render interactive visualizations and synthesize findings"
+                ]
 
         elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
         timeline_step = {

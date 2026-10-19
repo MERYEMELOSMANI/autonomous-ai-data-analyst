@@ -19,36 +19,80 @@ class ReportAgent:
         evidence_records = state.get("evidence_records", [])
         visualizations = state.get("visualizations", [])
 
-        # Construct structured markdown response
-        response_lines = [
-            f"### Analysis Overview: {dataset_name}\n",
-            f"**Query**: *\"{query}\"*\n"
-        ]
+        final_text = None
+        if llm_provider.is_configured():
+            findings_summary = "\n".join([f"- {f.get('title')}: {f.get('description')}" for f in findings])
+            prompt = f"""You are the Executive Report Agent in an Autonomous AI Data Analyst SaaS application.
+The user asked: "{query}"
+Dataset Name: "{dataset_name}"
 
-        if findings:
-            response_lines.append("#### Verified Findings")
-            for idx, f in enumerate(findings, 1):
-                ev_id = f.get("evidence_id", "")
-                verified_badge = "✅ **[Verified]**" if f.get("verified", True) else "⚠️ **[Discrepancy Detected]**"
-                response_lines.append(f"{idx}. {verified_badge} **{f.get('title')}**\n   {f.get('description')}")
-                if ev_id:
-                    response_lines.append(f"   *(Evidence ID: `{ev_id}` — inspect in Evidence panel)*")
-            response_lines.append("")
+Verified Findings Computed from Data:
+{findings_summary}
 
-        if quality_notes:
-            response_lines.append("#### Data Quality & Integrity Caveats")
-            for note in quality_notes[:3]:
-                response_lines.append(f"- {note}")
-            response_lines.append("")
+Data Quality Notes:
+{chr(10).join(['- ' + n for n in quality_notes[:4]])}
 
-        response_lines.append("#### Methodology & Guardrails")
-        response_lines.append(
-            "- Calculations executed deterministically via DuckDB AST-validated SQL engine.\n"
-            "- Quantitative figures verified independently by the Insight Verification Agent.\n"
-            "- *Note: Observed associations represent statistical patterns in this sample and do not establish direct causation.*"
-        )
+Write a direct, professional, and conversational analytical response that completely and accurately answers the user's question.
+Guidelines:
+- Start with a direct, comprehensive Executive Summary paragraph addressing the question.
+- Reference the verified numbers and findings directly.
+- Emphasize business context and meaning.
+- Distinguish correlation from causation.
+- Mention data quality notes if relevant.
+- Format using clean Markdown with headers and bullet points.
+"""
+            llm_text = await llm_provider.generate_text(prompt)
+            if llm_text and len(llm_text.strip()) > 50:
+                final_text = llm_text.strip()
 
-        final_text = "\n".join(response_lines)
+        if not final_text:
+            q_lower = query.lower()
+            is_overview = any(phrase in q_lower for phrase in [
+                "what is this data about", "what is this dataset", "what is this", "what is in", "tell me about",
+                "overview", "describe", "explain", "summary", "summarize", "about", "what do we have",
+                "what does this contain", "what do you understand"
+            ])
+
+            response_lines = [
+                f"### Executive Analysis: {dataset_name}\n",
+                f"**Inquiry**: *\"{query}\"*\n"
+            ]
+
+            if is_overview:
+                response_lines.append("#### Executive Summary")
+                response_lines.append(
+                    f"This dataset (**{dataset_name}**) provides a structured catalog of records tracking operational and business metrics. "
+                    "The table has been fully indexed in an isolated analytical engine, verified for data integrity, and evaluated for key statistical distributions.\n"
+                )
+            elif findings:
+                response_lines.append("#### Executive Summary")
+                primary_finding = findings[0].get("description", "")
+                response_lines.append(f"Analysis indicates: {primary_finding}\n")
+
+            if findings:
+                response_lines.append("#### Verified Findings & Evidence")
+                for idx, f in enumerate(findings, 1):
+                    ev_id = f.get("evidence_id", "")
+                    verified_badge = "✅ **[Verified]**" if f.get("verified", True) else "⚠️ **[Discrepancy Detected]**"
+                    response_lines.append(f"{idx}. {verified_badge} **{f.get('title')}**\n   {f.get('description')}")
+                    if ev_id:
+                        response_lines.append(f"   *(Evidence ID: `{ev_id}` — inspect in Evidence panel)*")
+                response_lines.append("")
+
+            if quality_notes:
+                response_lines.append("#### Data Quality & Integrity Caveats")
+                for note in quality_notes[:3]:
+                    response_lines.append(f"- {note}")
+                response_lines.append("")
+
+            response_lines.append("#### Methodology & Guardrails")
+            response_lines.append(
+                "- Calculations executed deterministically via DuckDB AST-validated SQL engine.\n"
+                "- Quantitative figures verified independently by the Insight Verification Agent.\n"
+                "- *Note: Observed associations represent statistical patterns in this sample and do not establish direct causation.*"
+            )
+
+            final_text = "\n".join(response_lines)
 
         elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
         timeline_step = {

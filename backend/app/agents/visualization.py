@@ -54,10 +54,70 @@ class VisualizationAgent:
     @staticmethod
     def _generate_plotly_spec(rows: List[Dict[str, Any]], cols: List[str], title_context: str) -> Dict[str, Any]:
         """Generate a clean, professional dark-themed Plotly figure spec."""
+        if not rows or not cols:
+            return None
+
+        # Case 1: Single summary row with multiple metrics (e.g. from an overview aggregation)
+        if len(rows) == 1:
+            row = rows[0]
+            metric_keys = [k for k, v in row.items() if isinstance(v, (int, float)) and not k.lower().startswith("total_")]
+            if metric_keys:
+                metric_labels = [k.replace("_", " ").title() for k in metric_keys]
+                metric_values = [row[k] for k in metric_keys]
+                trace = {
+                    "type": "bar",
+                    "x": metric_labels,
+                    "y": metric_values,
+                    "marker": {
+                        "color": "#38bdf8",
+                        "opacity": 0.85,
+                        "line": {"color": "#0ea5e9", "width": 1.5}
+                    }
+                }
+                layout = {
+                    "title": {
+                        "text": "Key Statistical Metrics Summary",
+                        "font": {"color": "#f8fafc", "size": 15, "family": "Inter, sans-serif"}
+                    },
+                    "paper_bgcolor": "rgba(0,0,0,0)",
+                    "plot_bgcolor": "rgba(0,0,0,0)",
+                    "margin": {"l": 50, "r": 30, "t": 50, "b": 60},
+                    "xaxis": {
+                        "tickfont": {"color": "#94a3b8", "size": 11},
+                        "gridcolor": "rgba(148, 163, 184, 0.12)"
+                    },
+                    "yaxis": {
+                        "tickfont": {"color": "#94a3b8", "size": 11},
+                        "gridcolor": "rgba(148, 163, 184, 0.12)",
+                        "zerolinecolor": "rgba(148, 163, 184, 0.15)"
+                    },
+                    "showlegend": False
+                }
+                return {
+                    "id": f"viz_{uuid.uuid4().hex[:8]}",
+                    "title": "Key Statistical Metrics Summary",
+                    "chart_type": "bar",
+                    "description": "Comparative distribution of primary statistical metrics across the dataset.",
+                    "plotly_figure": {"data": [trace], "layout": layout},
+                    "xAxis": "Metric",
+                    "yAxis": "Value"
+                }
+
+        # Case 2: Multi-row results (categories or items)
         x_col = cols[0]
         y_col = cols[-1]
 
-        # Extract values
+        # If x_col looks like an ID code and a descriptive name/category column exists, prefer the descriptive column
+        def is_id(name: str) -> bool:
+            nl = name.lower().replace(" ", "_")
+            return any(k in nl for k in ["id", "code", "ref", "key", "num", "no", "uuid", "identifier"])
+
+        if is_id(x_col) and len(cols) > 2:
+            for c in cols[1:-1]:
+                if not is_id(c):
+                    x_col = c
+                    break
+
         x_vals = [r.get(x_col) for r in rows[:25]]
         y_vals = [r.get(y_col) for r in rows[:25]]
 

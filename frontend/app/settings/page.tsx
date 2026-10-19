@@ -9,7 +9,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<any>(null);
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState('gemini-3.8-flash');
   const [observability, setObservability] = useState(true);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -112,9 +112,9 @@ export default function SettingsPage() {
               onChange={(e) => setSelectedModel(e.target.value)}
               className="w-full bg-secondary/30 border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary"
             >
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended — High speed & analytical reasoning)</option>
-              <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep reasoning & complex multi-agent steps)</option>
-              <option value="gemini-1.5-flash">Gemini 1.5 Flash (Lightweight)</option>
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash (Active & Recommended — High speed & analytical reasoning)</option>
+              <option value="gemini-flash-latest">Gemini Flash Latest</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep reasoning)</option>
             </select>
           </div>
 
