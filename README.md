@@ -151,10 +151,10 @@ pip install -r requirements.txt
 # Run backend test suite (14/14 tests)
 pytest tests -v
 
-# Start FastAPI Server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# Start FastAPI Server (running on port 8001)
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
 ```
-API Documentation will be live at `http://localhost:8000/docs`.
+API Documentation will be live at `http://localhost:8001/docs`.
 
 ### 2. Set Up Frontend
 
@@ -163,7 +163,7 @@ cd frontend
 npm install
 npm run dev
 ```
-Open `http://localhost:3000` in your browser.
+Open `http://localhost:3001` in your browser.
 
 ---
 
@@ -174,9 +174,9 @@ To run the complete production stack (PostgreSQL + FastAPI + Next.js) with a sin
 ```bash
 docker compose up --build
 ```
-- Frontend: `http://localhost:3000`
-- Backend API & OpenAPI Docs: `http://localhost:8000/docs`
-- Health check: `http://localhost:8000/api/v1/health`
+- Frontend: `http://localhost:3001`
+- Backend API & OpenAPI Docs: `http://localhost:8001/docs`
+- Health check: `http://localhost:8001/api/v1/health`
 
 ---
 

@@ -18,32 +18,44 @@ class ReportAgent:
         quality_notes = state.get("data_quality_notes", [])
         evidence_records = state.get("evidence_records", [])
         visualizations = state.get("visualizations", [])
+        query_results = state.get("query_results", [])
+
+        recent_rows = query_results[-1].get("rows", [])[:15] if query_results else []
+        rows_str = ""
+        if recent_rows:
+            rows_str = "\n".join([f"- {r}" for r in recent_rows])
 
         final_text = None
         if llm_provider.is_configured():
-            findings_summary = "\n".join([f"- {f.get('title')}: {f.get('description')}" for f in findings])
-            prompt = f"""You are the Executive Report Agent in an Autonomous AI Data Analyst SaaS application.
-The user asked: "{query}"
-Dataset Name: "{dataset_name}"
+            findings_summary = "\n".join([f"- {f.get('title')}: {f.get('description')}" for f in findings]) if findings else "Exploratory inquiry on dataset dimensions."
+            prompt = f"""You are an elite, highly intelligent AI Data Analyst advising an executive on the dataset "{dataset_name}".
+User Question / Prompt: "{query}"
 
-Verified Findings Computed from Data:
+Computed Query Results from Dataset:
+{rows_str if rows_str else "No specific rows returned."}
+
+Computed Verified Findings from the Dataset:
 {findings_summary}
 
 Data Quality Notes:
-{chr(10).join(['- ' + n for n in quality_notes[:4]])}
+{chr(10).join(['- ' + n for n in quality_notes[:4]]) if quality_notes else "Dataset is healthy."}
 
-Write a direct, professional, and conversational analytical response that completely and accurately answers the user's question.
-Guidelines:
-- Start with a direct, comprehensive Executive Summary paragraph addressing the question.
-- Reference the verified numbers and findings directly.
-- Emphasize business context and meaning.
-- Distinguish correlation from causation.
-- Mention data quality notes if relevant.
-- Format using clean Markdown with headers and bullet points.
+Instructions:
+1. DIRECTLY and CONVERSATIONALLY answer the user's specific question or prompt. Never answer with generic or irrelevant filler.
+2. Match the user's language: If the prompt is in French, answer in fluent professional French. If in English, answer in English.
+3. Integrate the computed numerical evidence, category distributions, or anomalies directly into your narrative.
+4. Provide sharp business intuition, strategic takeaways, and actionable next steps.
+5. Format with elegant Markdown using bold keywords and structured bullet points.
 """
             llm_text = await llm_provider.generate_text(prompt)
-            if llm_text and len(llm_text.strip()) > 50:
+            if llm_text and len(llm_text.strip()) > 30:
                 final_text = llm_text.strip()
+                if findings:
+                    evidence_footer = ["\n\n---", "#### ✅ Données & Preuves Vérifiées"]
+                    for idx, f in enumerate(findings[:5], 1):
+                        ev_id = f.get("evidence_id", "")
+                        evidence_footer.append(f"- **{f.get('title')}**: {f.get('description')}" + (f" `[ID: {ev_id}]`" if ev_id else ""))
+                    final_text += "\n" + "\n".join(evidence_footer)
 
         if not final_text:
             q_lower = query.lower()

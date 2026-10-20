@@ -1,6 +1,6 @@
 import { Dataset, AnalysisSession, ReportItem, EvidenceRecord, VisualizationSpec } from './types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8001/api/v1';
 
 export async function fetchHealth() {
   const res = await fetch(`${API_BASE}/health`, { cache: 'no-store' });

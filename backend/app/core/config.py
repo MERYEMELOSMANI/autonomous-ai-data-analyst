@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     
     # AI / LLM Configuration
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_MODEL: str = "gemini-3-flash-preview"
     AI_PROVIDER: str = "gemini"  # gemini, mock, offline
     TEMPERATURE: float = 0.1
     MAX_RETRIES: int = 2
@@ -40,8 +40,12 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
         "http://localhost:8000",
-        "http://127.0.0.1:8000"
+        "http://127.0.0.1:8000",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001"
     ]
 
 settings = Settings()
