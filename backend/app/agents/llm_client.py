@@ -21,6 +21,8 @@ class LLMProvider:
         self._client = None
 
     def is_configured(self) -> bool:
+        if settings.AI_PROVIDER.strip().lower() in {"offline", "mock"}:
+            return False
         key = self.api_key or os.environ.get("GEMINI_API_KEY")
         return bool(key and key.strip())
 

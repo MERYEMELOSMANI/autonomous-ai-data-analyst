@@ -2,14 +2,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.database.session import init_db
+from app.database.session import init_db, engine
 from app.api.api_v1.api import api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Initialize SQLite / PostgreSQL tables on startup
     await init_db()
-    yield
+    try:
+        yield
+    finally:
+        await engine.dispose()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

@@ -49,6 +49,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8001/api/v1
     container_name: analyst-frontend
     restart: unless-stopped
     depends_on:

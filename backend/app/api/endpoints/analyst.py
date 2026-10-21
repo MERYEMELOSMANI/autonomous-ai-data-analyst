@@ -119,6 +119,13 @@ async def stream_analysis(
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
+    if session_id:
+        session = await db.get(AnalysisSessionModel, session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Analysis session not found")
+        if session.dataset_id != dataset_id:
+            raise HTTPException(status_code=400, detail="Analysis session belongs to another dataset")
+
     is_injection, injection_msg = check_prompt_injection(query)
     if is_injection:
         raise HTTPException(status_code=400, detail=injection_msg)
